@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>ASCII Art Decoder: Mask, Mapping, Morse, Numeric, Base64, Auto Bar Mask</title>
+  <style>
+    body { font-family: Consolas, monospace; background: #f3f6fa; }
+    .container { max-width: 1100px; margin: 2em auto; background: #fff; border-radius: 13px; box-shadow: 0 2px 13px #66b4de15; padding: 2em;}
+    textarea, input[type="text"] { width: 100%; font-size: 1.11em; font-family: inherit; padding: 0.9em; margin-bottom: 1em; border-radius: 6px; border: 1.5px solid #b5e1ee; background: #f6fcfd;}
+    label { display: block; font-weight: bold; margin-top: 1.1em; }
+    .decoded-div, .numeric-div, .base64-div, .morse-div, .morse2letter-div, .az-div {
+      margin-top: 2em; background: #e7f5ee; padding: 1.2em; border-radius: 7px; box-shadow: 0 1px 4px #6bc1b612;
+    }
+    .btn, .barbtn { padding: 0.6em 1.7em; background: #159cc1; color: #fff; font-weight: bold; border-radius: 7px; border: none; margin-bottom: 0.66em; cursor: pointer;}
+    .btn-dl { background: #315393; font-size:1em; margin-left:.5em; }
+    .barbtn { background: #358944; margin-left: 0.5em; font-size:0.97em;}
+    .note  {font-size:.98em; color:#555; margin:0.4em 0 .9em 0;}
+    pre {word-break:break-all; margin:0.4em 0 0 0;}
+    .inputs {display:flex;gap:2em;}
+    .inputs > div {flex:1 1 0;}
+    @media (max-width:700px) {.container{padding:.7em .3em;}.inputs{flex-direction:column;gap:0em;}}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h2>ASCII Art Decoder:<br>Custom Mask, Mapping, Morse, Numeric, A-Z, Base64, <span style="color:#358944">Auto Bar Mask</span></h2>
+  <div class="inputs">
+    <div>
+      <label for="asciiArt">ASCII Art Input:</label>
+      <textarea id="asciiArt" rows="12" placeholder="Paste your ASCII art here..."></textarea>
+    </div>
+    <div>
+      <label>
+        Custom Mask (column numbers, 1-based, space/comma separated):
+        <button class="barbtn" onclick="autoBarMask()">Auto-generate Bar Mask</button>
+      </label>
+      <input type="text" id="mask" placeholder="e.g. 1 3 4 7">
+      <div class="note">
+        Only columns at these positions (across) are extracted from each line, then joined together. Example: <b>2 4 5 7</b> extracts the 2nd, 4th, 5th, and 7th character from each line.<br>
+        <b>Auto Bar Mask</b> scans your ASCII art and selects all column positions containing a bar ( | ) on any line.
+      </div>
+      <label for="mapping">Mapping (e.g. O=A, .=., X=B, |=I, etc):</label>
+      <input type="text" id="mapping" placeholder="Char/sequence=Output, separate pairs by comma (e.g. O=A, .=., |=I)">
+      <div class="note">
+        Use <b>=</b> to map input to output: e.g., O=A, .=., *=X<br>
+        Multi-char matches allowed (e.g. <b>||=M, |=I</b>).
+      </div>
+      <button class="btn" onclick="decodeAsciiArt()">Decode</button>
+    </div>
+  </div>
+  <div class="decoded-div">
+    <b>Masked + Mapped Output:</b>
+    <button class="btn btn-dl" onclick="downloadText('decoded')">⬇️ Download as .txt</button>
+    <pre id="decodedOutput"></pre>
+  </div>
+  <div class="numeric-div">
+    <b>Output as Numbers (A=1 ... Z=26):</b>
+    <button class="btn btn-dl" onclick="downloadText('numeric')">⬇️ Download as .txt</button>
+    <pre id="numericOutput"></pre>
+  </div>
+  <div class="morse-div">
+    <b>Output as Morse Code:</b>
+    <button class="btn btn-dl" onclick="downloadText('morse')">⬇️ Download as .txt</button>
+    <pre id="morseOutput"></pre>
+  </div>
+  <div class="morse2letter-div">
+    <b>Morse to Letters (A-Z/0-9):</b>
+    <button class="btn btn-dl" onclick="downloadText('morseLetter')">⬇️ Download as .txt</button>
+    <pre id="morseLetterOutput"></pre>
+  </div>
+  <div class="az-div">
+    <b>Output as A-Z Barcode:</b>
+    <button class="btn btn-dl" onclick="downloadText('az')">⬇️ Download as .txt</button>
+    <pre id="azOutput"></pre>
+  </div>
+  <div class="base64-div">
+    <b>Output as Base64 (line by line):</b>
+    <button class="btn btn-dl" onclick="downloadText('base64')">⬇️ Download as .txt</button>
+    <pre id="base64Output"></pre>
+  </div>
+</div>
+<script>
+// Parse mapping string into an ordered array: [{pattern,output}], longer patterns first
+function parseMapping(mapString) {
+  let mappings = [];
+  let pairs = mapString.split(",");
+  for (let pair of pairs) {
+    if (!pair.trim()) continue;
+    let [from, to] = pair.split("=");
+    if (from === undefined || to === undefined) continue;
+    from = from.trim(); to = to.trim();
+    if (from.length)
+      mappings.push({from, to});
+  }
+  // Sort by pattern length DESC for multi-char
+  mappings.sort((a,b)=>b.from.length - a.from.length);
+  return mappings;
+}
+
+// MORSE table
+const MORSE_TABLE = {
+  '.-':'A','-...':'B','-.-.':'C','-..':'D','.':'E','..-.':'F','--.':'G','....':'H','..':'I',
+  '.---':'J','-.-':'K','.-..':'L','--':'M','-.':'N','---':'O','.--.':'P','--.-':'Q','.-.':'R',
+  '...':'S','-':'T','..-':'U','...-':'V','.--':'W','-..-':'X','-.--':'Y','--..':'Z',
+  '-----':'0','.----':'1','..---':'2','...--':'3','....-':'4','.....':'5','-....':'6',
+  '--...':'7','---..':'8','----.':'9'
+};
+
+let lastDecoded = "", lastNumeric = "", lastBase64 = "";
+let lastMorse = "", lastMorseLetter = "", lastAZ = "";
+
+// Parse mask string into array of column indices (0-based)
+function parseMask(maskString) {
+  if (!maskString.trim()) return null; // null = use full line
+  return maskString.split(/[ ,]+/)
+    .map(x => parseInt(x, 10) - 1)
+    .filter(x => !isNaN(x) && x >= 0);
+}
+
+// Auto-generate mask of all columns containing a '|'
+function autoBarMask() {
+  const art = document.getElementById('asciiArt').value || "";
+  const lines = art.split('\n');
+  if (!lines.length) return;
+  let maxLen = lines.reduce((a, l) => Math.max(a, l.length), 0);
+  let colSet = new Set();
+  for (let c = 0; c < maxLen; ++c) {
+    for (let r = 0; r < lines.length; ++r) {
+      if (lines[r][c] === '|') { colSet.add(c); break; }
+    }
+  }
+  // 1-based indices for mask field
+  let maskList = Array.from(colSet).sort((a, b) => a - b).map(i => (i + 1)).join(' ');
+  document.getElementById('mask').value = maskList;
+}
+
+function applyMask(lines, maskCols) {
+  if (!maskCols) return lines;
+  return lines.map(line => {
+    let out = "";
+    for (let idx of maskCols) {
+      out += (idx < line.length) ? line[idx] : " ";
+    }
+    return out;
+  });
+}
+
+function decodeAsciiArt() {
+  let art = document.getElementById('asciiArt').value || "";
+  let maskStr = document.getElementById('mask').value || "";
+  let maskCols = parseMask(maskStr);
+  let mappingStr = document.getElementById('mapping').value || "";
+  let mappings = parseMapping(mappingStr);
+
+  let inLines = art.split('\n');
+  let maskedLines = applyMask(inLines, maskCols);
+  let decodedLines = maskedLines.map(line => decodeLine(line, mappings));
+  let decoded = decodedLines.join("\n");
+
+  let numeric = decodedLines.map(line => letterToNumbers(line)).join("\n");
+  let morse = decodedLines.map(line => toMorse(line)).join("\n");
+  let morseLetter = decodedLines.map(line => morseToLetterLine(toMorse(line))).join("\n");
+  let az = decodedLines.map(line => azBarcode(line)).join("\n");
+  let base64Lines = decodedLines.map(line => utf8_to_b64(line));
+  let base64 = base64Lines.join("\n");
+
+  lastDecoded = decoded;
+  lastNumeric = numeric;
+  lastMorse = morse;
+  lastMorseLetter = morseLetter;
+  lastAZ = az;
+  lastBase64 = base64;
+
+  document.getElementById('decodedOutput').textContent = decoded;
+  document.getElementById('numericOutput').textContent = numeric;
+  document.getElementById('morseOutput').textContent = morse;
+  document.getElementById('morseLetterOutput').textContent = morseLetter;
+  document.getElementById('azOutput').textContent = az;
+  document.getElementById('base64Output').textContent = base64;
+}
+
+// --- Mapping application ---
+function decodeLine(line, mappings) {
+  let out = "";
+  for (let i = 0; i < line.length;) {
+    let replaced = false;
+    for (let {from, to} of mappings) {
+      if (line.startsWith(from, i)) {
+        out += to;
+        i += from.length;
+        replaced = true;
+        break;
+      }
+    }
+    if (!replaced) {
+      out += line[i];
+      i++;
+    }
+  }
+  return out;
+}
+
+// --- Numeric ---
+function letterToNumbers(text) {
+  let out = [];
+  for (let i=0;i<text.length;i++) {
+    let code = text[i].toUpperCase().charCodeAt(0);
+    if (code >= 65 && code <= 90) {
+      out.push(String(code - 64));
+    } else if (text[i] === "\n") {
+      out.push("\n");
+    } else if (text[i] === " "){
+      out.push(" ");
+    } else {
+      out.push(text[i]);
+    }
+  }
+  return out.join(" ");
+}
+
+// --- Morse encoding ---
+function toMorse(str) {
+  let CHART = {
+    A: ".-", B: "-...", C: "-.-.", D: "-..", E: ".", F: "..-.",
+    G: "--.", H: "....", I: "..", J: ".---", K: "-.-", L: ".-..",
+    M: "--", N: "-.", O: "---", P: ".--.", Q: "--.-", R: ".-.",
+    S: "...", T: "-", U: "..-", V: "...-", W: ".--", X: "-..-",
+    Y: "-.--", Z: "--..",
+    0: "-----", 1: ".----", 2: "..---", 3: "...--", 4: "....-",
+    5: ".....", 6: "-....", 7: "--...", 8: "---..", 9: "----."
+  };
+  return str.split(/\s+/).map(word =>
+    word.split("").map(c => {
+      let up = c.toUpperCase();
+      return CHART[up] !== undefined ? CHART[up] : c;
+    }).join(" ")
+  ).join(" / ");
+}
+
+// --- Morse to Letter decoder ---
+function morseToLetterLine(line) {
+  // Accepts: ".... . .-.. .-.. --- / .-- --- .-. .-.. -.."
+  // (/ is word break)
+  return line.replace(/\//g, "/")
+    .split(/\/|\s{2,}/).map(word =>
+      word.trim().split(/\s+/).map(sym => MORSE_TABLE[sym] || "?").join("")
+    ).join(" ");
+}
+
+// --- A-Z Barcode ---
+function azBarcode(line) {
+  // Very naive: group continuous bars, convert count to A-Z.
+  let res = "", count=0, inBar=false;
+  for (let i=0; i<line.length; ++i) {
+    if (line[i] === "|") {
+      if (!inBar) inBar = true, count=0;
+      count++;
+    } else {
+      if (inBar) {
+        if (count >= 1 && count <= 26) res += String.fromCharCode(64 + count);
+        inBar = false; count=0;
+      }
+      if (line[i].match(/[A-Z]/i)) res += line[i];
+      if (line[i] === " ") res += " ";
+    }
+  }
+  if (inBar && count >= 1 && count <= 26) res += String.fromCharCode(64 + count);
+  return res;
+}
+
+// --- Base64 (UTF-8) ---
+function utf8_to_b64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+// --- Download handler ---
+function downloadText(which) {
+  let txt = "";
+  if (which === "decoded") txt = lastDecoded;
+  else if (which === "numeric") txt = lastNumeric;
+  else if (which === "morse") txt = lastMorse;
+  else if (which === "morseLetter") txt = lastMorseLetter;
+  else if (which === "az") txt = lastAZ;
+  else if (which === "base64") txt = lastBase64;
+  else return;
+  let fname =
+      which === "decoded"     ? "decoded-output.txt"
+    : which === "numeric"     ? "numeric-output.txt"
+    : which === "morse"       ? "morse-output.txt"
+    : which === "morseLetter" ? "morse-to-letter-output.txt"
+    : which === "az"          ? "az-barcode.txt"
+    : which === "base64"      ? "base64-output.txt"
+    : "output.txt";
+  let blob = new Blob([txt], {type: "text/plain"});
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a');
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url); a.remove();}, 200);
+}
+</script>
+</body>
+</html>
