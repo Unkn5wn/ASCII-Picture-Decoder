@@ -11,3 +11,5 @@ Example of Mask Input :++++|++++|++|+++|++|+++|+++|+++|++++++|++|++|+++|++++++++
 The Mask Input needs to be the longest ASCII Line of Code specially if you want to decode more than one line which size may be different.
 
 Depending on your ASCII Line will determine what you would use for Mask Input.
+
+I used these ASCII Pictures from the following for this protype: https://github.com/SLASHEM-Extended/SLASHEM-Extended/blob/cee7da80a4ba2cc54b7166ef3c493074925e91d8/dat/Prost.des
