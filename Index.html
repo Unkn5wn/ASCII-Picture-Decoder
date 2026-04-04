@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Integrated ASCII Art Cipher Decoder (Colorful Density Heatmap)</title>
+  <title>Integrated ASCII Art Cipher Decoder (Colorful Density Heatmap, TXT Report)</title>
   <style>
     body { font-family:Consolas,monospace; background:#f7f8fc; }
     .container { max-width:1020px; margin:2em auto; padding:1.4em 1.2em; background:#fff; border-radius:13px; box-shadow:0 2px 13px #66b4de15;}
@@ -72,6 +72,7 @@
     <button onclick="downloadColumn('raw')">⬇️ Download Raw Output (.txt)</button>
     <button onclick="downloadColumn('morse')">⬇️ Download Morse Decoded (.txt)</button>
     <button onclick="downloadColumn('az')">⬇️ Download A→Z Barcode Decoded (.txt)</button>
+    <button onclick="downloadFullReport()">⬇️ Download Full Report (.txt)</button>
   </div>
   <table>
     <thead>
@@ -101,7 +102,6 @@ const MORSE_TABLE = {
   '#':'C',
   '|':'L'
 };
-// + is never a symbol, always just space (ignored/split on)
 function splitMorseBlocks(line) {
   const flat = [];
   line.trim().split(/\s+/).forEach(block => {
@@ -111,13 +111,11 @@ function splitMorseBlocks(line) {
       let parts = block.split(/(?=\|)|(?<=\|)/g).filter(Boolean);
       parts.forEach(p => (p === '|') ? flat.push('|') : flat.push(p));
     }
-    // Split blocks of multiple #
     else if (/^#+$/.test(block)) {
       block.split('').forEach(c => flat.push(c));
     }
-    // Skip blocks of only pluses (they're just spaces)
     else if (/^\++$/.test(block)) {
-      // do nothing: just a space, not a symbol
+      // skip: plus = only a space, not a code symbol
     }
     else flat.push(block);
   });
@@ -140,8 +138,6 @@ function decodeMorse(line, html=false) {
     return '?' + (suggestions ? '(' + suggestions + ')' : '');
   }).join('');
 }
-
-// --- A-Z classic "barcode"
 function barAtoZDecoder(code) {
   let trimmed = code.replace(/ /g,"");
   let ptr=0,res=[];
@@ -158,11 +154,7 @@ function barAtoZDecoder(code) {
   }
   return res.join('');
 }
-
-// --- State: for downloads
 let lastExtractRows = [];
-
-// === Mask preset select logic
 function updateMaskFromPreset(sel) {
   var val = sel.value;
   if(val) {
@@ -170,8 +162,6 @@ function updateMaskFromPreset(sel) {
     document.getElementById('barmaskShow').textContent = val;
   }
 }
-
-// === Main function
 function runExtract() {
   const mask = document.getElementById('barMaskInput').value;
   document.getElementById('barmaskShow').textContent = mask;
@@ -191,7 +181,6 @@ function runExtract() {
     for(let i=0;i<width;++i){
       if(mask[i]==='|') collapse+=inputLine[i];
     }
-    // For Morse: + in mask creates a space (separator), not a symbol
     let morseRaw = '';
     for(let i=0;i<width;++i){
       if(mask[i]==='|') morseRaw+=inputLine[i];
@@ -220,8 +209,6 @@ function runExtract() {
   renderDensityMap(allMaskedOut);
   renderHeatMap(allMaskedOut);
 }
-
-// --- Density/Histogram mapping and UI
 function renderDensityMap(lines) {
   let counts = {};
   let total = 0;
@@ -231,8 +218,6 @@ function renderDensityMap(lines) {
       total++;
     }
   });
-
-  // Sort by count desc, then character code asc
   let entries = Object.entries(counts).sort((a,b) => b[1]-a[1] || a[0].charCodeAt(0)-b[0].charCodeAt(0));
   let bins = Math.max(...entries.map(e=>e[1]||1), 1);
   let div = document.getElementById('densityDiv');
@@ -255,13 +240,10 @@ function renderDensityMap(lines) {
   </div>`;
   div.innerHTML = t;
 }
-
-// --- Aesthetically pleasing multi-hue column heatmap (green > yellow > orange > red)
 function renderHeatMap(lines) {
   let rows = lines.length;
   if(rows == 0) {document.getElementById('densityHeatDiv').innerHTML=''; return;}
   let width = Math.max(...lines.map(l=>l.length),1);
-  // Build counts for colorings
   let colCharCounts = [], colMaxes = [];
   for(let col=0;col<width;++col){
     colCharCounts[col]={};
@@ -275,7 +257,6 @@ function renderHeatMap(lines) {
       if(colCharCounts[col][c]>colMaxes[col])colMaxes[col]=colCharCounts[col][c];
     }
   }
-  // Build HTML
   let html = `<div style="margin-bottom:0.5em;">
 Heatmap: <span style="font-size:.95em;color:#444">(lines × columns; color = local char density in column)</span>
 </div>
@@ -287,14 +268,12 @@ Heatmap: <span style="font-size:.95em;color:#444">(lines × columns; color = loc
     for(let col=0;col<width;++col){
       let c = (line[col]!==undefined)?line[col]:' ';
       let n = colCharCounts[col][c]||0, m = colMaxes[col]||1;
-      // Color band: [0–5] maps green to orange to red
       let band = m===0?0:Math.round(n/m*5);
       html += `<td class="heatcell heat${band}" title="Row ${row+1}, Col ${col+1}: '${c}' — ${n}× in this column">${c===' '?"&nbsp;":c}</td>`;
     }
     html += `</tr>`;
   }
   html += `</tbody></table></div>`;
-  // Heatmap char legend
   let charSet=new Set(), widthmax=0;
   lines.forEach(line=>{for(let c of line)charSet.add(c);if(line.length>widthmax)widthmax=line.length;});
   let sorted = Array.from(charSet).sort((a,b)=>a.charCodeAt(0)-b.charCodeAt(0));
@@ -306,7 +285,6 @@ Heatmap: <span style="font-size:.95em;color:#444">(lines × columns; color = loc
   html += `</div>`;
   document.getElementById('densityHeatDiv').innerHTML = html;
 }
-
 // === Download helpers
 function downloadColumn(which) {
   let txt = '';
@@ -333,7 +311,66 @@ function downloadColumn(which) {
   a.click();
   setTimeout(()=>{URL.revokeObjectURL(url); a.remove();}, 200);
 }
+function downloadFullReport() {
+  let mask = document.getElementById('barMaskInput').value;
+  let preset = document.getElementById('maskPresets');
+  let presetname = preset.options[preset.selectedIndex] ? preset.options[preset.selectedIndex].text : "";
+  let lines = lastExtractRows;
+  if (!lines || !lines.length) { alert("Run Extract & Decode first."); return; }
 
+  // Density map & counts
+  let charCounts = {};
+  let total = 0;
+  lines.forEach(r => {
+    for (let c of r.outLine) {
+      charCounts[c] = (charCounts[c] || 0) + 1;
+      total++;
+    }
+  });
+  let densityArr = Object.entries(charCounts).sort((a, b) => b[1] - a[1] || a[0].charCodeAt(0) - b[0].charCodeAt(0));
+
+  // Table title
+  let out = "";
+  out += `ASCII Art Cipher Decoder Report\n`;
+  out += `================================\n`;
+  out += `Preset: ${preset.selectedIndex>0 ? preset.options[preset.selectedIndex].text : "(custom)"}\n`;
+  out += `Mask:   ${mask}\n`;
+  out += `Lines:  ${lines.length}\n\n`;
+  out += `Density Map (character counts):\n`;
+  densityArr.forEach(([c, n])=>{
+    let bar = '█'.repeat(Math.round((n/Math.max(...densityArr.map(x=>x[1])))*24));
+    let cc = (c===" ")?'␣':c;
+    out += `  ${cc}: ${n.toString().padStart(4," ")} | ${bar}\n`;
+  });
+  out += `  Total chars: ${total}\n\n`;
+  // All outputs in table
+  out += "Full Output Table:\n";
+  out += "#  Masked Output (aligned)\n";
+  lines.forEach((r,i)=>{
+    out += `${(i+1).toString().padStart(3," ")}: ${r.outLine}\n`;
+  });
+  out += "\n#  Collapsed (Barcode/Morse)\n";
+  lines.forEach((r,i)=>{
+    out += `${(i+1).toString().padStart(3," ")}: ${r.collapse}\n`;
+  });
+  out += "\n#  Morse Decoded\n";
+  lines.forEach((r,i)=>{
+    out += `${(i+1).toString().padStart(3," ")}: ${r.morseDecoded}\n`;
+  });
+  out += "\n#  A->Z Barcode Decoded\n";
+  lines.forEach((r,i)=>{
+    out += `${(i+1).toString().padStart(3," ")}: ${r.azDecoded}\n`;
+  });
+  // Download
+  let blob = new Blob([out], {type: "text/plain"});
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a');
+  a.href = url;
+  a.download = "ascii-cipher-report.txt";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url); a.remove();}, 200);
+}
 // Auto-populate mask for first view
 document.getElementById('barmaskShow').textContent = document.getElementById('barMaskInput').value;
 </script>
