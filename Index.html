@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Integrated ASCII Art Cipher Decoder (Colorful Density Heatmap)</title>
+  <style>
+    body { font-family:Consolas,monospace; background:#f7f8fc; }
+    .container { max-width:1020px; margin:2em auto; padding:1.4em 1.2em; background:#fff; border-radius:13px; box-shadow:0 2px 13px #66b4de15;}
+    h2 { text-align:center; color:#158b97;}
+    textarea, input.barMaskInput {
+      width:100%; font-size:1.08em; font-family:Consolas,monospace; padding:1em;
+      border-radius:6px; border:1.5px solid #add6ea; background:#f6fcfd; min-height:110px; color:#213869; margin-bottom:.7em;
+    }
+    input.barMaskInput{min-height:initial;}
+    button{background:#1694b2;color:#fff;border:none;font-weight:600;padding:0.66em 1.6em;border-radius:6px;margin:1em .6em .3em 0;cursor:pointer;}
+    select#maskPresets {font-size:1em;padding:0.3em 1em;margin-right:.7em;margin-bottom:.7em;}
+    table{width:100%;margin-top:1.2em;border-collapse:collapse;}
+    th,td{font-size:1.02em;text-align:left;padding:.17em .5em;vertical-align:top;}
+    th{background:#e3f7f6;}
+    .outcell{background:#e7f4ee;white-space:pre;}
+    .decodeout{background:#f3fcff;}
+    pre.barmask{background:#f3fcff;padding:.41em;border-radius:7px;}
+    .headlab{color:#0e7e7b;font-weight:bold;margin-top:1.2em;}
+    .modehead{background:#efffff;}
+    .dlbox{margin: .7em 0 1em 0;}
+    .densitybox{margin:1.6em 0 1.4em 0;}
+    .densitytbl{border:1.5px solid #67aed7;background:#f2f7fb;width:320px;margin-bottom:.7em;}
+    .densitytbl th{background:#d2ebfa;}
+    .densitybar{display:inline-block;}
+    .heatmaptable {border-collapse:collapse;margin:0.13em 0;}
+    .heatmaptable td {width:18px;height:18px;text-align:center;font-size:1em;padding:0;line-height:1;}
+    .heatcell {border:1px solid #e2e6ee; transition:background 0.17s;}
+    .heatcell.heat0 {background:#f5f7f3;}
+    .heatcell.heat1 {background:#caffa1;}
+    .heatcell.heat2 {background:#ffe96c;}
+    .heatcell.heat3 {background:#ffbc57;}
+    .heatcell.heat4 {background:#ff6f2c;color:#fff;}
+    .heatcell.heat5 {background:#cf2027;color:#fff;}
+    .heatcell:hover {box-shadow:0 2px 24px #297ab977;z-index:2;position:relative;}
+    .heatkey {display:inline-block;width:18px;height:18px;text-align:center;margin:0 2px;}
+    .heatlegend {margin-top:0.3em;margin-bottom:.5em;}
+    @media(max-width:700px){.container{padding:.7em .3em;}textarea,input.barMaskInput{font-size:.97em;}th,td{font-size:.95em;}
+    select#maskPresets{width:100%;}.densitytbl{width:99%;}.heatmaptable td{width:11px;height:11px;font-size:.88em}}
+    label{display:block;}
+    .unknown-suggestion { color: #b71c1c; font-weight: bold; }
+    .decodeout .unknown-suggestion { background: #ffe9e9; border-radius: 6px; padding: 0 3px;}
+  </style>
+</head>
+<body>
+<div class="container">
+  <h2>Integrated ASCII Art Cipher Decoder</h2>
+  <label class="headlab" for="barMaskInput">
+    Mask (<b>|</b> = keep, <b>+</b> = always space in output, others = skip):
+  </label>
+  <select id="maskPresets" onchange="updateMaskFromPreset(this)">
+    <option value="">— Choose Mask Preset —</option>
+    <option value="|||+|+++|+++|||||++|+|+++|++++|+++|+++|+++|+++|+|+++++|++++|||++|+|++|+++|">BarMask #1</option>
+    <option value="+|++++++++||++++++|||++++++||++++||++|+++||++||+||++|+++++||++++||++|+++++++|++++">BarMask #2</option>
+    <option value="+|++++||++++|++++||++++|+++++||++++||++|++++||+||+||++++||++||+||++|+++||+++|++">BarMask #3</option>
+    <option value="|||||+||++||||||||+||++||||||||||||||||||||||||||||||||||||||||+|+||||||+||||||">BarMask #4</option>
+    <option value="++++|++++|++|+++|++|+++|+++|+++|++++++|++|++|+++|+++++++++++++++++++++++++++++">BarMask #5</option>
+  </select>
+  <input type="text" class="barMaskInput" id="barMaskInput"
+      value="|||+|+++|+++|||||++|+|+++|++++|+++|+++|+++|+++|+|+++++|++++|||++|+|++|+++|">
+  <label class="headlab" for="artInput">ASCII Art Input:</label>
+  <textarea id="artInput" placeholder="Paste your ASCII art here..."></textarea>
+  <button onclick="runExtract()">Extract & Decode</button>
+  <div><b>Mask Reference:</b>
+    <pre class="barmask" id="barmaskShow"></pre>
+  </div>
+  <div class="dlbox">
+    <button onclick="downloadColumn('raw')">⬇️ Download Raw Output (.txt)</button>
+    <button onclick="downloadColumn('morse')">⬇️ Download Morse Decoded (.txt)</button>
+    <button onclick="downloadColumn('az')">⬇️ Download A→Z Barcode Decoded (.txt)</button>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>#</th>
+        <th>Masked Output (Aligned)</th>
+        <th>Collapsed (Barcode/Morse Input)</th>
+        <th>Decoded: <span style="color:#009;">Morse <span style="font-weight:normal">(Suggestions for ? possible codes)</span></span></th>
+        <th>Decoded: <span style="color:#086;">A&#8594;Z Barcode</span></th>
+      </tr>
+    </thead>
+    <tbody id="outputTbody"></tbody>
+  </table>
+  <div class="densitybox">
+    <h3 style="margin:0 0 .6em .2em;font-size:1.08em;color:#306;">Density Map (Masked Output): Char Frequency</h3>
+    <div id="densityDiv"></div>
+    <div id="densityHeatDiv" style="margin-top:.8em"></div>
+  </div>
+</div>
+<script>
+const MORSE_TABLE = {
+  '.-':'A','-...':'B','-.-.':'C','-..':'D','.':'E','..-.':'F','--.':'G','....':'H','..':'I',
+  '.---':'J','-.-':'K','.-..':'L','--':'M','-.':'N','---':'O','.--.':'P','--.-':'Q','.-.':'R',
+  '...':'S','-':'T','..-':'U','...-':'V','.--':'W','-..-':'X','-.--':'Y','--..':'Z',
+  '-----':'0','.----':'1','..---':'2','...--':'3','....-':'4','.....':'5','-....':'6',
+  '--...':'7','---..':'8','----.':'9',
+  '#':'C',
+  '|':'L'
+};
+// + is never a symbol, always just space (ignored/split on)
+function splitMorseBlocks(line) {
+  const flat = [];
+  line.trim().split(/\s+/).forEach(block => {
+    if (block === '|') {
+      flat.push('|');
+    } else if (block.includes('|')) {
+      let parts = block.split(/(?=\|)|(?<=\|)/g).filter(Boolean);
+      parts.forEach(p => (p === '|') ? flat.push('|') : flat.push(p));
+    }
+    // Split blocks of multiple #
+    else if (/^#+$/.test(block)) {
+      block.split('').forEach(c => flat.push(c));
+    }
+    // Skip blocks of only pluses (they're just spaces)
+    else if (/^\++$/.test(block)) {
+      // do nothing: just a space, not a symbol
+    }
+    else flat.push(block);
+  });
+  return flat;
+}
+function getMorseSuggestions(code) {
+  let len = code.length;
+  let suggestions = [];
+  for (let [k, v] of Object.entries(MORSE_TABLE)) {
+    if (k.length === len && /^[A-Z0-9]$/.test(v)) suggestions.push(v);
+  }
+  suggestions = [...new Set(suggestions)];
+  return suggestions.sort().join('');
+}
+function decodeMorse(line, html=false) {
+  return splitMorseBlocks(line).map(code => {
+    if (MORSE_TABLE[code]) return MORSE_TABLE[code];
+    let suggestions = getMorseSuggestions(code);
+    if(html) return `<span class="unknown-suggestion">?${suggestions ? '('+suggestions+')' : ''}</span>`;
+    return '?' + (suggestions ? '(' + suggestions + ')' : '');
+  }).join('');
+}
+
+// --- A-Z classic "barcode"
+function barAtoZDecoder(code) {
+  let trimmed = code.replace(/ /g,"");
+  let ptr=0,res=[];
+  while(ptr < trimmed.length) {
+    if(trimmed[ptr] !== '|') { ptr++; continue; }
+    let start = ptr;
+    while(ptr < trimmed.length && trimmed[ptr]==='|') ptr++;
+    let barCount = ptr - start;
+    let isDash = (trimmed[ptr] === '-')?1:0;
+    if(isDash) ptr++;
+    let idx = (isDash ? barCount : barCount+1)-1;
+    if(idx>=0 && idx<26) res.push(String.fromCharCode(65+idx));
+    else res.push('?');
+  }
+  return res.join('');
+}
+
+// --- State: for downloads
+let lastExtractRows = [];
+
+// === Mask preset select logic
+function updateMaskFromPreset(sel) {
+  var val = sel.value;
+  if(val) {
+    document.getElementById('barMaskInput').value = val;
+    document.getElementById('barmaskShow').textContent = val;
+  }
+}
+
+// === Main function
+function runExtract() {
+  const mask = document.getElementById('barMaskInput').value;
+  document.getElementById('barmaskShow').textContent = mask;
+  let lines = document.getElementById('artInput').value.replace(/\r\n/g,"\n").replace(/\r/g,"\n").split("\n");
+  const width = mask.length;
+  let tbody = '';
+  let resultRows = [];
+  let allMaskedOut = [];
+  for(let idx=0; idx<lines.length; ++idx){
+    let inputLine = (lines[idx]+' '.repeat(width)).slice(0,width);
+    let outLine = '';
+    for(let i=0;i<width;++i){
+      if(mask[i] === '|') outLine += inputLine[i];
+      else if(mask[i] === '+') outLine += ' ';
+    }
+    let collapse = '';
+    for(let i=0;i<width;++i){
+      if(mask[i]==='|') collapse+=inputLine[i];
+    }
+    // For Morse: + in mask creates a space (separator), not a symbol
+    let morseRaw = '';
+    for(let i=0;i<width;++i){
+      if(mask[i]==='|') morseRaw+=inputLine[i];
+      else if(mask[i]==='+') morseRaw+=' ';
+    }
+    let morseDecoded = decodeMorse(morseRaw.replace(/[^.\-\|# +]/g,''), true);
+    let azDecoded = barAtoZDecoder(collapse.replace(/[^|\-]/g,''));
+    resultRows.push({
+      outLine,
+      collapse,
+      morseDecoded: decodeMorse(morseRaw.replace(/[^.\-\|# +]/g,''), false),
+      azDecoded
+    });
+    tbody += `<tr>
+      <td>${idx+1}</td>
+      <td class="outcell">${outLine}</td>
+      <td class="decodeout">${collapse}</td>
+      <td class="decodeout">${morseDecoded}</td>
+      <td class="decodeout">${azDecoded}</td>
+    </tr>`;
+    allMaskedOut.push(outLine);
+  }
+  document.getElementById('outputTbody').innerHTML = tbody;
+  lastExtractRows = resultRows;
+
+  renderDensityMap(allMaskedOut);
+  renderHeatMap(allMaskedOut);
+}
+
+// --- Density/Histogram mapping and UI
+function renderDensityMap(lines) {
+  let counts = {};
+  let total = 0;
+  lines.forEach(line => {
+    for (let c of line) {
+      counts[c] = (counts[c] || 0) + 1;
+      total++;
+    }
+  });
+
+  // Sort by count desc, then character code asc
+  let entries = Object.entries(counts).sort((a,b) => b[1]-a[1] || a[0].charCodeAt(0)-b[0].charCodeAt(0));
+  let bins = Math.max(...entries.map(e=>e[1]||1), 1);
+  let div = document.getElementById('densityDiv');
+  if(!entries.length){div.innerHTML="<i>No output to analyze. Run Extract & Decode first.</i>";return;}
+  let t = `<table class="densitytbl"><thead><tr>
+<th>Char</th><th>Count</th><th>Density</th>
+</tr></thead><tbody>`;
+  entries.forEach(([ch, cnt]) => {
+    let safeCh = ch === " " ? "&nbsp;" : ch.replace(/</g,"&lt;");
+    let barLen = Math.round((cnt/bins)*24) || 1;
+    t += `<tr>
+<td style="text-align:center">${safeCh}</td>
+<td style="text-align:right">${cnt}</td>
+<td><span class="densitybar">${"█".repeat(barLen)}</span></td>
+</tr>`;
+  });
+  t += `</tbody></table>
+  <div style="font-size:.92em;color:#444;padding-left:.6em;">
+    <b>Total characters:</b> ${total}
+  </div>`;
+  div.innerHTML = t;
+}
+
+// --- Aesthetically pleasing multi-hue column heatmap (green > yellow > orange > red)
+function renderHeatMap(lines) {
+  let rows = lines.length;
+  if(rows == 0) {document.getElementById('densityHeatDiv').innerHTML=''; return;}
+  let width = Math.max(...lines.map(l=>l.length),1);
+  // Build counts for colorings
+  let colCharCounts = [], colMaxes = [];
+  for(let col=0;col<width;++col){
+    colCharCounts[col]={};
+    colMaxes[col]=0;
+  }
+  for(let i=0; i<rows; ++i){
+    let line = lines[i];
+    for(let col=0; col<width; ++col){
+      let c = (line[col]!==undefined)?line[col]:' ';
+      colCharCounts[col][c] = (colCharCounts[col][c]||0)+1;
+      if(colCharCounts[col][c]>colMaxes[col])colMaxes[col]=colCharCounts[col][c];
+    }
+  }
+  // Build HTML
+  let html = `<div style="margin-bottom:0.5em;">
+Heatmap: <span style="font-size:.95em;color:#444">(lines × columns; color = local char density in column)</span>
+</div>
+<div style="overflow-x:auto;"><table class="heatmaptable"><tbody>
+`;
+  for(let row=0;row<rows;++row){
+    html += `<tr>`;
+    let line = lines[row];
+    for(let col=0;col<width;++col){
+      let c = (line[col]!==undefined)?line[col]:' ';
+      let n = colCharCounts[col][c]||0, m = colMaxes[col]||1;
+      // Color band: [0–5] maps green to orange to red
+      let band = m===0?0:Math.round(n/m*5);
+      html += `<td class="heatcell heat${band}" title="Row ${row+1}, Col ${col+1}: '${c}' — ${n}× in this column">${c===' '?"&nbsp;":c}</td>`;
+    }
+    html += `</tr>`;
+  }
+  html += `</tbody></table></div>`;
+  // Heatmap char legend
+  let charSet=new Set(), widthmax=0;
+  lines.forEach(line=>{for(let c of line)charSet.add(c);if(line.length>widthmax)widthmax=line.length;});
+  let sorted = Array.from(charSet).sort((a,b)=>a.charCodeAt(0)-b.charCodeAt(0));
+  html += `<div class="heatlegend"><b>Unique chars:</b> `;
+  sorted.forEach(c=>{
+    let cc = c===' '?"␣":c.replace(/</g,"&lt;");
+    html += `<span class="heatkey">${cc}</span>`;
+  });
+  html += `</div>`;
+  document.getElementById('densityHeatDiv').innerHTML = html;
+}
+
+// === Download helpers
+function downloadColumn(which) {
+  let txt = '';
+  let fname = '';
+  if (which==="raw") {
+    txt = lastExtractRows.map(r=>r.outLine).join('\n');
+    fname = "masked-output.txt";
+  }
+  else if (which==="morse") {
+    txt = lastExtractRows.map(r=>r.morseDecoded.replace(/<[^>]+>/g,'')).join('\n');
+    fname = "morse-decoded.txt";
+  }
+  else if (which==="az") {
+    txt = lastExtractRows.map(r=>r.azDecoded).join('\n');
+    fname = "az-barcode.txt";
+  }
+  else return;
+  let blob = new Blob([txt], {type: "text/plain"});
+  let url = URL.createObjectURL(blob);
+  let a = document.createElement('a');
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(()=>{URL.revokeObjectURL(url); a.remove();}, 200);
+}
+
+// Auto-populate mask for first view
+document.getElementById('barmaskShow').textContent = document.getElementById('barMaskInput').value;
+</script>
+</body>
+</html>
